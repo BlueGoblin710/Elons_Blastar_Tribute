@@ -1,6 +1,12 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
+// Load images
+const playerImage = new Image();
+playerImage.src = 'player.png';
+const enemyImage = new Image();
+enemyImage.src = 'enemy.png';
+
 // Web Audio API setup for sounds
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 function playSound(frequency, duration) {
@@ -23,8 +29,8 @@ let introPlayed = false;
 const player = {
     x: canvas.width / 2,
     y: canvas.height - 50,
-    width: 40,
-    height: 20,
+    width: 40, // Match player.png width
+    height: 20, // Match player.png height
     fuel: 100,
     maxFuel: 100
 };
@@ -123,17 +129,22 @@ function startGame() {
     update();
 }
 
-// Improved player graphics
+// Draw player with image
 function drawPlayer() {
-    ctx.fillStyle = '#00f';
-    ctx.beginPath();
-    ctx.moveTo(player.x, player.y);
-    ctx.lineTo(player.x - player.width/2, player.y + player.height);
-    ctx.lineTo(player.x + player.width/2, player.y + player.height);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#aaa';
-    ctx.fillRect(player.x - 10, player.y - 5, 20, 10); // Cockpit
+    if (playerImage.complete) { // Ensure image is loaded
+        ctx.drawImage(playerImage, player.x - player.width / 2, player.y, player.width, player.height);
+    } else {
+        // Fallback to original drawing if image not loaded
+        ctx.fillStyle = '#00f';
+        ctx.beginPath();
+        ctx.moveTo(player.x, player.y);
+        ctx.lineTo(player.x - player.width / 2, player.y + player.height);
+        ctx.lineTo(player.x + player.width / 2, player.y + player.height);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#aaa';
+        ctx.fillRect(player.x - 10, player.y - 5, 20, 10);
+    }
 }
 
 // Player Bullet class
@@ -183,19 +194,24 @@ class Enemy {
         this.y = -20;
         this.type = type;
         this.speed = modes[gameMode].enemySpeeds[type];
-        this.width = type === 'tank' ? 40 : 30;
-        this.height = type === 'tank' ? 30 : 20;
+        this.width = type === 'tank' ? 40 : 30; // Match enemy.png scaled for tank
+        this.height = type === 'tank' ? 30 : 20; // Match enemy.png scaled for tank
         this.health = type === 'tank' ? 2 : 1;
         this.shootCooldown = modes[gameMode].enemyShootCooldowns[type];
         this.shootTimer = Math.random() * this.shootCooldown;
     }
 
     draw() {
-        ctx.fillStyle = this.type === 'fast' ? '#f00' : this.type === 'tank' ? '#0f0' : '#0ff';
-        ctx.fillRect(this.x, this.y, this.width, this.height);
-        if (this.type === 'tank') {
-            ctx.fillStyle = '#fff';
-            ctx.fillRect(this.x + 10, this.y - 5, 10, 10); // Turret
+        if (enemyImage.complete) { // Ensure image is loaded
+            ctx.drawImage(enemyImage, this.x, this.y, this.width, this.height);
+        } else {
+            // Fallback to original drawing if image not loaded
+            ctx.fillStyle = this.type === 'fast' ? '#f00' : this.type === 'tank' ? '#0f0' : '#0ff';
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+            if (this.type === 'tank') {
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(this.x + 10, this.y - 5, 10, 10);
+            }
         }
     }
 
@@ -434,5 +450,13 @@ function resetGame() {
     gameMode = null;
 }
 
-// Start the game loop
-update();
+// Wait for images to load before starting (optional improvement)
+Promise.all([
+    new Promise(resolve => playerImage.onload = resolve),
+    new Promise(resolve => enemyImage.onload = resolve)
+]).then(() => {
+    update(); // Start game loop after images are loaded
+}).catch(() => {
+    console.log("Images failed to load, starting with fallback graphics");
+    update(); // Start anyway with fallback
+});
