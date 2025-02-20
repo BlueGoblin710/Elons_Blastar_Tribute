@@ -8,6 +8,8 @@ const enemyImage = new Image();
 enemyImage.src = 'enemy.png';
 const fuelImage = new Image();
 fuelImage.src = 'fuel.png';
+const boostImage = new Image();
+boostImage.src = 'boost.png';
 
 // Web Audio API setup for sounds
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -56,8 +58,8 @@ const modes = {
         enemySpeeds: { fast: 1, tank: 0.3, basic: 0.5 },
         enemyShootCooldowns: { fast: 180, tank: 120, basic: 240 },
         powerUpSpeed: 0.3,
-        fuelConsumption: 0.005,
-        shootInterval: 30,
+        fuelConsumption: 0.001, // Reduced for longer play
+        shootInterval: 30, // Base shooting interval
         enemySpawnInterval: 150,
         powerUpSpawnInterval: 600
     },
@@ -67,7 +69,7 @@ const modes = {
         enemySpeeds: { fast: 2, tank: 0.5, basic: 1 },
         enemyShootCooldowns: { fast: 120, tank: 90, basic: 150 },
         powerUpSpeed: 0.5,
-        fuelConsumption: 0.01,
+        fuelConsumption: 0.002,
         shootInterval: 20,
         enemySpawnInterval: 100,
         powerUpSpawnInterval: 400
@@ -78,7 +80,7 @@ const modes = {
         enemySpeeds: { fast: 3, tank: 1, basic: 2 },
         enemyShootCooldowns: { fast: 60, tank: 40, basic: 80 },
         powerUpSpeed: 1,
-        fuelConsumption: 0.02,
+        fuelConsumption: 0.005,
         shootInterval: 10,
         enemySpawnInterval: 50,
         powerUpSpawnInterval: 200
@@ -88,9 +90,10 @@ const modes = {
 // Controls
 let rightPressed = false;
 let leftPressed = false;
-let upPressed = false; // Added for forward movement
-let downPressed = false; // Added for backward movement
+let upPressed = false;
+let downPressed = false;
 let spacePressed = false;
+let currentShootInterval; // Tracks temporary shooting rate
 
 // Event listeners
 document.addEventListener('keydown', keyDownHandler);
@@ -99,19 +102,22 @@ document.addEventListener('keyup', keyUpHandler);
 function keyDownHandler(e) {
     if (e.key === '1' && !gameStarted) {
         gameMode = 'easy';
+        currentShootInterval = modes.easy.shootInterval; // Set initial value
         startGame();
     } else if (e.key === '2' && !gameStarted) {
         gameMode = 'medium';
+        currentShootInterval = modes.medium.shootInterval;
         startGame();
     } else if (e.key === '3' && !gameStarted) {
         gameMode = 'hardcore';
+        currentShootInterval = modes.hardcore.shootInterval;
         startGame();
     }
     if (gameStarted) {
         if (e.key === 'Right' || e.key === 'ArrowRight') rightPressed = true;
         if (e.key === 'Left' || e.key === 'ArrowLeft') leftPressed = true;
-        if (e.key === 'Up' || e.key === 'ArrowUp') upPressed = true; // Forward
-        if (e.key === 'Down' || e.key === 'ArrowDown') downPressed = true; // Backward
+        if (e.key === 'Up' || e.key === 'ArrowUp') upPressed = true;
+        if (e.key === 'Down' || e.key === 'ArrowDown') downPressed = true;
         if (e.key === ' ' && !spacePressed) spacePressed = true;
     }
     e.preventDefault();
@@ -120,8 +126,8 @@ function keyDownHandler(e) {
 function keyUpHandler(e) {
     if (e.key === 'Right' || e.key === 'ArrowRight') rightPressed = false;
     if (e.key === 'Left' || e.key === 'ArrowLeft') leftPressed = false;
-    if (e.key === 'Up' || e.key === 'ArrowUp') upPressed = false; // Forward
-    if (e.key === 'Down' || e.key === 'ArrowDown') downPressed = false; // Backward
+    if (e.key === 'Up' || e.key === 'ArrowUp') upPressed = false;
+    if (e.key === 'Down' || e.key === 'ArrowDown') downPressed = false;
     if (e.key === ' ') spacePressed = false;
     e.preventDefault();
 }
@@ -139,10 +145,9 @@ function startGame() {
 
 // Draw player with image
 function drawPlayer() {
-    if (playerImage.complete) { // Ensure image is loaded
+    if (playerImage.complete) {
         ctx.drawImage(playerImage, player.x - player.width / 2, player.y, player.width, player.height);
     } else {
-        // Fallback to original drawing if image not loaded
         ctx.fillStyle = '#00f';
         ctx.beginPath();
         ctx.moveTo(player.x, player.y);
@@ -202,18 +207,17 @@ class Enemy {
         this.y = -20;
         this.type = type;
         this.speed = modes[gameMode].enemySpeeds[type];
-        this.width = type === 'tank' ? 40 : 30; // Match enemy.png scaled for tank
-        this.height = type === 'tank' ? 30 : 20; // Match enemy.png scaled for tank
+        this.width = type === 'tank' ? 40 : 30;
+        this.height = type === 'tank' ? 30 : 20;
         this.health = type === 'tank' ? 2 : 1;
         this.shootCooldown = modes[gameMode].enemyShootCooldowns[type];
         this.shootTimer = Math.random() * this.shootCooldown;
     }
 
     draw() {
-        if (enemyImage.complete) { // Ensure image is loaded
+        if (enemyImage.complete) {
             ctx.drawImage(enemyImage, this.x, this.y, this.width, this.height);
         } else {
-            // Fallback to original drawing if image not loaded
             ctx.fillStyle = this.type === 'fast' ? '#f00' : this.type === 'tank' ? '#0f0' : '#0ff';
             ctx.fillRect(this.x, this.y, this.width, this.height);
             if (this.type === 'tank') {
@@ -228,7 +232,7 @@ class Enemy {
         this.shootTimer--;
         if (this.shootTimer <= 0) {
             enemyBullets.push(new EnemyBullet(this.x + this.width / 2 - 2, this.y + this.height));
-            playSound(300, 0.1); // Enemy shoot sound
+            playSound(300, 0.1);
             this.shootTimer = this.shootCooldown;
         }
     }
@@ -266,24 +270,20 @@ class PowerUp {
     constructor() {
         this.x = Math.random() * (canvas.width - 20);
         this.y = -20;
-        this.width = 20; // Match fuel.png width
-        this.height = 20; // Match fuel.png height
+        this.width = 20;
+        this.height = 20;
         this.speed = modes[gameMode].powerUpSpeed;
-        this.type = Math.random() > 0.5 ? 'fuel' : 'speed';
+        this.type = Math.random() > 0.5 ? 'fuel' : 'boost'; // Changed 'speed' to 'boost'
     }
 
     draw() {
         if (this.type === 'fuel' && fuelImage.complete) {
             ctx.drawImage(fuelImage, this.x, this.y, this.width, this.height);
-        } else if (this.type === 'fuel') {
-            // Fallback for fuel if image not loaded
-            ctx.fillStyle = '#ff0';
-            ctx.beginPath();
-            ctx.arc(this.x + this.width / 2, this.y + this.height / 2, this.width / 2, 0, Math.PI * 2);
-            ctx.fill();
+        } else if (this.type === 'boost' && boostImage.complete) {
+            ctx.drawImage(boostImage, this.x, this.y, this.width, this.height);
         } else {
-            // Speed power-up remains a circle
-            ctx.fillStyle = '#f0f';
+            // Fallback: yellow for fuel, purple for boost
+            ctx.fillStyle = this.type === 'fuel' ? '#ff0' : '#f0f';
             ctx.beginPath();
             ctx.arc(this.x + this.width / 2, this.y + this.height / 2, this.width / 2, 0, Math.PI * 2);
             ctx.fill();
@@ -300,7 +300,7 @@ function createExplosion(x, y) {
     for (let i = 0; i < 20; i++) {
         explosions.push(new Particle(x + Math.random() * 20 - 10, y + Math.random() * 20 - 10));
     }
-    playSound(100, 0.3); // Explosion sound
+    playSound(100, 0.3);
 }
 
 // Game loop
@@ -331,14 +331,14 @@ function update() {
     // Move player
     if (rightPressed && player.x + player.width / 2 < canvas.width) player.x += player.speed;
     if (leftPressed && player.x - player.width / 2 > 0) player.x -= player.speed;
-    if (upPressed && player.y > 0) player.y -= player.speed; // Move forward (up)
-    if (downPressed && player.y + player.height < canvas.height) player.y += player.speed; // Move backward (down)
+    if (upPressed && player.y > 0) player.y -= player.speed;
+    if (downPressed && player.y + player.height < canvas.height) player.y += player.speed;
 
-    // Shoot two bullets from left and right sides
-    if (spacePressed && frameCount % modes[gameMode].shootInterval === 0) {
+    // Shoot two bullets from left and right sides using current shoot interval
+    if (spacePressed && frameCount % currentShootInterval === 0) {
         bullets.push(new Bullet(player.x - player.width / 2 + 5, player.y));
         bullets.push(new Bullet(player.x + player.width / 2 - 5, player.y));
-        playSound(500, 0.1); // Player shoot sound
+        playSound(500, 0.1);
     }
 
     // Update and draw player bullets
@@ -402,9 +402,10 @@ function update() {
 
         // Collision with player
         if (enemy.y + enemy.height > player.y &&
+            enemy.y < player.y + player.height &&
             enemy.x < player.x + player.width / 2 &&
             enemy.x + enemy.width > player.x - player.width / 2) {
-            alert(`Game Over! Score: ${score}`);
+            alert(`Game Over! Collision with enemy. Score: ${score}`);
             resetGame();
             return;
         }
@@ -425,13 +426,17 @@ function update() {
 
         // Power-up collection
         if (powerUp.y + powerUp.height > player.y &&
+            powerUp.y < player.y + player.height &&
             powerUp.x < player.x + player.width / 2 &&
             powerUp.x + powerUp.width > player.x - player.width / 2) {
             if (powerUp.type === 'fuel') {
                 player.fuel = Math.min(player.maxFuel, player.fuel + 30);
-            } else if (powerUp.type === 'speed') {
-                player.speed = modes[gameMode].playerSpeed + 1;
-                setTimeout(() => player.speed = modes[gameMode].playerSpeed, 5000);
+            } else if (powerUp.type === 'boost') {
+                // Reduce shoot interval for faster shooting (higher rate)
+                currentShootInterval = Math.max(5, modes[gameMode].shootInterval / 2); // Half the base interval, min 5
+                setTimeout(() => {
+                    currentShootInterval = modes[gameMode].shootInterval; // Reset after 5 seconds
+                }, 5000);
             }
             powerUps.splice(index, 1);
             if (Math.random() < 0.5) {
@@ -462,7 +467,7 @@ function resetGame() {
     explosions = [];
     score = 0;
     player.x = canvas.width / 2;
-    player.y = canvas.height - 50; // Reset y position
+    player.y = canvas.height - 50;
     player.fuel = player.maxFuel;
     rightPressed = false;
     leftPressed = false;
@@ -472,16 +477,18 @@ function resetGame() {
     gameStarted = false;
     frameCount = 0;
     gameMode = null;
+    currentShootInterval = null; // Reset to null, set on mode selection
 }
 
 // Wait for images to load before starting
 Promise.all([
     new Promise(resolve => playerImage.onload = resolve),
     new Promise(resolve => enemyImage.onload = resolve),
-    new Promise(resolve => fuelImage.onload = resolve)
+    new Promise(resolve => fuelImage.onload = resolve),
+    new Promise(resolve => boostImage.onload = resolve)
 ]).then(() => {
-    update(); // Start game loop after images are loaded
+    update();
 }).catch(() => {
     console.log("Images failed to load, starting with fallback graphics");
-    update(); // Start anyway with fallback
+    update();
 });
