@@ -6,6 +6,8 @@ const playerImage = new Image();
 playerImage.src = 'player.png';
 const enemyImage = new Image();
 enemyImage.src = 'enemy.png';
+const fuelImage = new Image();
+fuelImage.src = 'fuel.png';
 
 // Web Audio API setup for sounds
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -86,6 +88,8 @@ const modes = {
 // Controls
 let rightPressed = false;
 let leftPressed = false;
+let upPressed = false; // Added for forward movement
+let downPressed = false; // Added for backward movement
 let spacePressed = false;
 
 // Event listeners
@@ -106,6 +110,8 @@ function keyDownHandler(e) {
     if (gameStarted) {
         if (e.key === 'Right' || e.key === 'ArrowRight') rightPressed = true;
         if (e.key === 'Left' || e.key === 'ArrowLeft') leftPressed = true;
+        if (e.key === 'Up' || e.key === 'ArrowUp') upPressed = true; // Forward
+        if (e.key === 'Down' || e.key === 'ArrowDown') downPressed = true; // Backward
         if (e.key === ' ' && !spacePressed) spacePressed = true;
     }
     e.preventDefault();
@@ -114,6 +120,8 @@ function keyDownHandler(e) {
 function keyUpHandler(e) {
     if (e.key === 'Right' || e.key === 'ArrowRight') rightPressed = false;
     if (e.key === 'Left' || e.key === 'ArrowLeft') leftPressed = false;
+    if (e.key === 'Up' || e.key === 'ArrowUp') upPressed = false; // Forward
+    if (e.key === 'Down' || e.key === 'ArrowDown') downPressed = false; // Backward
     if (e.key === ' ') spacePressed = false;
     e.preventDefault();
 }
@@ -258,17 +266,28 @@ class PowerUp {
     constructor() {
         this.x = Math.random() * (canvas.width - 20);
         this.y = -20;
-        this.width = 20;
-        this.height = 20;
+        this.width = 20; // Match fuel.png width
+        this.height = 20; // Match fuel.png height
         this.speed = modes[gameMode].powerUpSpeed;
         this.type = Math.random() > 0.5 ? 'fuel' : 'speed';
     }
 
     draw() {
-        ctx.fillStyle = this.type === 'fuel' ? '#ff0' : '#f0f';
-        ctx.beginPath();
-        ctx.arc(this.x + this.width/2, this.y + this.height/2, this.width/2, 0, Math.PI * 2);
-        ctx.fill();
+        if (this.type === 'fuel' && fuelImage.complete) {
+            ctx.drawImage(fuelImage, this.x, this.y, this.width, this.height);
+        } else if (this.type === 'fuel') {
+            // Fallback for fuel if image not loaded
+            ctx.fillStyle = '#ff0';
+            ctx.beginPath();
+            ctx.arc(this.x + this.width / 2, this.y + this.height / 2, this.width / 2, 0, Math.PI * 2);
+            ctx.fill();
+        } else {
+            // Speed power-up remains a circle
+            ctx.fillStyle = '#f0f';
+            ctx.beginPath();
+            ctx.arc(this.x + this.width / 2, this.y + this.height / 2, this.width / 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
     }
 
     update() {
@@ -310,13 +329,15 @@ function update() {
     }
 
     // Move player
-    if (rightPressed && player.x + player.width/2 < canvas.width) player.x += player.speed;
-    if (leftPressed && player.x - player.width/2 > 0) player.x -= player.speed;
+    if (rightPressed && player.x + player.width / 2 < canvas.width) player.x += player.speed;
+    if (leftPressed && player.x - player.width / 2 > 0) player.x -= player.speed;
+    if (upPressed && player.y > 0) player.y -= player.speed; // Move forward (up)
+    if (downPressed && player.y + player.height < canvas.height) player.y += player.speed; // Move backward (down)
 
     // Shoot two bullets from left and right sides
     if (spacePressed && frameCount % modes[gameMode].shootInterval === 0) {
-        bullets.push(new Bullet(player.x - player.width/2 + 5, player.y));
-        bullets.push(new Bullet(player.x + player.width/2 - 5, player.y));
+        bullets.push(new Bullet(player.x - player.width / 2 + 5, player.y));
+        bullets.push(new Bullet(player.x + player.width / 2 - 5, player.y));
         playSound(500, 0.1); // Player shoot sound
     }
 
@@ -335,8 +356,8 @@ function update() {
 
         // Collision with player
         if (bullet.y + bullet.height > player.y &&
-            bullet.x < player.x + player.width/2 &&
-            bullet.x + bullet.width > player.x - player.width/2) {
+            bullet.x < player.x + player.width / 2 &&
+            bullet.x + bullet.width > player.x - player.width / 2) {
             alert(`Game Over! Hit by enemy fire. Score: ${score}`);
             resetGame();
             return;
@@ -368,7 +389,7 @@ function update() {
                 enemy.health--;
                 bullets.splice(bulletIndex, 1);
                 if (enemy.health <= 0) {
-                    createExplosion(enemy.x + enemy.width/2, enemy.y + enemy.height/2);
+                    createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
                     enemies.splice(enemies.indexOf(enemy), 1);
                     score += enemy.type === 'tank' ? 20 : 10;
                     if (Math.random() < 0.1) {
@@ -381,8 +402,8 @@ function update() {
 
         // Collision with player
         if (enemy.y + enemy.height > player.y &&
-            enemy.x < player.x + player.width/2 &&
-            enemy.x + enemy.width > player.x - player.width/2) {
+            enemy.x < player.x + player.width / 2 &&
+            enemy.x + enemy.width > player.x - player.width / 2) {
             alert(`Game Over! Score: ${score}`);
             resetGame();
             return;
@@ -404,8 +425,8 @@ function update() {
 
         // Power-up collection
         if (powerUp.y + powerUp.height > player.y &&
-            powerUp.x < player.x + player.width/2 &&
-            powerUp.x + powerUp.width > player.x - player.width/2) {
+            powerUp.x < player.x + player.width / 2 &&
+            powerUp.x + powerUp.width > player.x - player.width / 2) {
             if (powerUp.type === 'fuel') {
                 player.fuel = Math.min(player.maxFuel, player.fuel + 30);
             } else if (powerUp.type === 'speed') {
@@ -441,19 +462,23 @@ function resetGame() {
     explosions = [];
     score = 0;
     player.x = canvas.width / 2;
+    player.y = canvas.height - 50; // Reset y position
     player.fuel = player.maxFuel;
     rightPressed = false;
     leftPressed = false;
+    upPressed = false;
+    downPressed = false;
     spacePressed = false;
     gameStarted = false;
     frameCount = 0;
     gameMode = null;
 }
 
-// Wait for images to load before starting (optional improvement)
+// Wait for images to load before starting
 Promise.all([
     new Promise(resolve => playerImage.onload = resolve),
-    new Promise(resolve => enemyImage.onload = resolve)
+    new Promise(resolve => enemyImage.onload = resolve),
+    new Promise(resolve => fuelImage.onload = resolve)
 ]).then(() => {
     update(); // Start game loop after images are loaded
 }).catch(() => {
