@@ -1,6 +1,15 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
+// Dynamic canvas sizing
+function resizeCanvas() {
+    canvas.width = Math.min(window.innerWidth, 800);
+    canvas.height = Math.min(window.innerHeight, 600);
+    player.x = canvas.width / 2; // Reset player position
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas(); // Initial sizing
+
 // Web Audio API setup for sounds
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 function playSound(frequency, duration) {
@@ -81,10 +90,16 @@ const modes = {
 let rightPressed = false;
 let leftPressed = false;
 let spacePressed = false;
+let touchX = null;
 
-// Event listeners
+// Event listeners (Keyboard)
 document.addEventListener('keydown', keyDownHandler);
 document.addEventListener('keyup', keyUpHandler);
+
+// Touch event listeners
+canvas.addEventListener('touchstart', touchStartHandler);
+canvas.addEventListener('touchmove', touchMoveHandler);
+canvas.addEventListener('touchend', touchEndHandler);
 
 function keyDownHandler(e) {
     if (e.key === '1' && !gameStarted) {
@@ -110,6 +125,33 @@ function keyUpHandler(e) {
     if (e.key === 'Left' || e.key === 'ArrowLeft') leftPressed = false;
     if (e.key === ' ') spacePressed = false;
     e.preventDefault();
+}
+
+function touchStartHandler(e) {
+    e.preventDefault();
+    if (!gameStarted) {
+        const touchY = e.touches[0].clientY;
+        if (touchY < canvas.height / 3) gameMode = 'easy';
+        else if (touchY < (canvas.height * 2) / 3) gameMode = 'medium';
+        else gameMode = 'hardcore';
+        startGame();
+    } else {
+        touchX = e.touches[0].clientX;
+        spacePressed = true; // Start shooting on touch
+    }
+}
+
+function touchMoveHandler(e) {
+    e.preventDefault();
+    if (gameStarted && touchX !== null) {
+        touchX = e.touches[0].clientX;
+    }
+}
+
+function touchEndHandler(e) {
+    e.preventDefault();
+    touchX = null;
+    spacePressed = false; // Stop shooting on release
 }
 
 function startGame() {
@@ -277,9 +319,9 @@ function update() {
         ctx.font = '30px Arial';
         ctx.textAlign = 'center';
         ctx.fillText('Select Mode:', canvas.width / 2, canvas.height / 2 - 50);
-        ctx.fillText('1 - Easy', canvas.width / 2, canvas.height / 2);
-        ctx.fillText('2 - Medium', canvas.width / 2, canvas.height / 2 + 50);
-        ctx.fillText('3 - Hardcore', canvas.width / 2, canvas.height / 2 + 100);
+        ctx.fillText('1 / Top - Easy', canvas.width / 2, canvas.height / 2);
+        ctx.fillText('2 / Mid - Medium', canvas.width / 2, canvas.height / 2 + 50);
+        ctx.fillText('3 / Bot - Hardcore', canvas.width / 2, canvas.height / 2 + 100);
         drawPlayer();
         requestAnimationFrame(update);
         return;
@@ -293,9 +335,13 @@ function update() {
         return;
     }
 
-    // Move player
-    if (rightPressed && player.x + player.width/2 < canvas.width) player.x += player.speed;
-    if (leftPressed && player.x - player.width/2 > 0) player.x -= player.speed;
+    // Move player (keyboard or touch)
+    if (rightPressed || (touchX !== null && touchX > canvas.width / 2)) {
+        if (player.x + player.width/2 < canvas.width) player.x += player.speed;
+    }
+    if (leftPressed || (touchX !== null && touchX < canvas.width / 2)) {
+        if (player.x - player.width/2 > 0) player.x -= player.speed;
+    }
 
     // Shoot two bullets from left and right sides
     if (spacePressed && frameCount % modes[gameMode].shootInterval === 0) {
@@ -352,7 +398,7 @@ function update() {
                 enemy.health--;
                 bullets.splice(bulletIndex, 1);
                 if (enemy.health <= 0) {
-                    createExplosion(enemy.x + enemy.width/2, enemy.y + enemy.height/2);
+                    createExplosion(enemy.x + this.width/2, enemy.y + enemy.height/2);
                     enemies.splice(enemies.indexOf(enemy), 1);
                     score += enemy.type === 'tank' ? 20 : 10;
                     if (Math.random() < 0.1) {
@@ -429,6 +475,7 @@ function resetGame() {
     rightPressed = false;
     leftPressed = false;
     spacePressed = false;
+    touchX = null;
     gameStarted = false;
     frameCount = 0;
     gameMode = null;
