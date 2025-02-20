@@ -33,8 +33,8 @@ let introPlayed = false;
 const player = {
     x: canvas.width / 2,
     y: canvas.height - 50,
-    width: 40, // Match player.png width
-    height: 20, // Match player.png height
+    width: 40,
+    height: 20,
     fuel: 100,
     maxFuel: 100
 };
@@ -58,8 +58,8 @@ const modes = {
         enemySpeeds: { fast: 1, tank: 0.3, basic: 0.5 },
         enemyShootCooldowns: { fast: 180, tank: 120, basic: 240 },
         powerUpSpeed: 0.3,
-        fuelConsumption: 0.001, // Reduced for longer play
-        shootInterval: 30, // Base shooting interval
+        fuelConsumption: 0.001,
+        shootInterval: 30,
         enemySpawnInterval: 150,
         powerUpSpawnInterval: 600
     },
@@ -93,7 +93,7 @@ let leftPressed = false;
 let upPressed = false;
 let downPressed = false;
 let spacePressed = false;
-let currentShootInterval; // Tracks temporary shooting rate
+let currentShootInterval;
 
 // Event listeners
 document.addEventListener('keydown', keyDownHandler);
@@ -102,7 +102,7 @@ document.addEventListener('keyup', keyUpHandler);
 function keyDownHandler(e) {
     if (e.key === '1' && !gameStarted) {
         gameMode = 'easy';
-        currentShootInterval = modes.easy.shootInterval; // Set initial value
+        currentShootInterval = modes.easy.shootInterval;
         startGame();
     } else if (e.key === '2' && !gameStarted) {
         gameMode = 'medium';
@@ -273,7 +273,7 @@ class PowerUp {
         this.width = 20;
         this.height = 20;
         this.speed = modes[gameMode].powerUpSpeed;
-        this.type = Math.random() > 0.5 ? 'fuel' : 'boost'; // Changed 'speed' to 'boost'
+        this.type = Math.random() > 0.5 ? 'fuel' : 'boost';
     }
 
     draw() {
@@ -282,7 +282,6 @@ class PowerUp {
         } else if (this.type === 'boost' && boostImage.complete) {
             ctx.drawImage(boostImage, this.x, this.y, this.width, this.height);
         } else {
-            // Fallback: yellow for fuel, purple for boost
             ctx.fillStyle = this.type === 'fuel' ? '#ff0' : '#f0f';
             ctx.beginPath();
             ctx.arc(this.x + this.width / 2, this.y + this.height / 2, this.width / 2, 0, Math.PI * 2);
@@ -334,7 +333,7 @@ function update() {
     if (upPressed && player.y > 0) player.y -= player.speed;
     if (downPressed && player.y + player.height < canvas.height) player.y += player.speed;
 
-    // Shoot two bullets from left and right sides using current shoot interval
+    // Shoot two bullets from left and right sides
     if (spacePressed && frameCount % currentShootInterval === 0) {
         bullets.push(new Bullet(player.x - player.width / 2 + 5, player.y));
         bullets.push(new Bullet(player.x + player.width / 2 - 5, player.y));
@@ -350,29 +349,20 @@ function update() {
 
     // Update and draw enemy bullets
     enemyBullets = enemyBullets.filter(b => b.y < canvas.height);
-    enemyBullets.forEach(bullet => {
+    enemyBullets.forEach((bullet, bulletIndex) => {
         bullet.update();
         bullet.draw();
 
-        // Collision with player
+        // Precise collision with player
         if (bullet.y + bullet.height > player.y &&
-            bullet.x < player.x + player.width / 2 &&
-            bullet.x + bullet.width > player.x - player.width / 2) {
+            bullet.y < player.y + player.height &&
+            bullet.x + bullet.width > player.x - player.width / 2 &&
+            bullet.x < player.x + player.width / 2) {
             alert(`Game Over! Hit by enemy fire. Score: ${score}`);
             resetGame();
             return;
         }
     });
-
-    // Spawn enemies and power-ups
-    frameCount++;
-    if (frameCount % modes[gameMode].enemySpawnInterval === 0) {
-        const type = Math.random() < 0.3 ? 'fast' : Math.random() < 0.6 ? 'tank' : 'basic';
-        enemies.push(new Enemy(type));
-    }
-    if (frameCount % modes[gameMode].powerUpSpawnInterval === 0) {
-        powerUps.push(new PowerUp());
-    }
 
     // Update and draw enemies
     enemies = enemies.filter(e => e.y < canvas.height);
@@ -400,11 +390,11 @@ function update() {
             }
         });
 
-        // Collision with player
+        // Precise collision with player
         if (enemy.y + enemy.height > player.y &&
             enemy.y < player.y + player.height &&
-            enemy.x < player.x + player.width / 2 &&
-            enemy.x + enemy.width > player.x - player.width / 2) {
+            enemy.x + enemy.width > player.x - player.width / 2 &&
+            enemy.x < player.x + player.width / 2) {
             alert(`Game Over! Collision with enemy. Score: ${score}`);
             resetGame();
             return;
@@ -420,25 +410,24 @@ function update() {
 
     // Update and draw power-ups
     powerUps = powerUps.filter(p => p.y < canvas.height);
-    powerUps.forEach((powerUp, index) => {
+    powerUps.forEach((powerUp, powerUpIndex) => {
         powerUp.update();
         powerUp.draw();
 
-        // Power-up collection
+        // Power-up collection with precise check
         if (powerUp.y + powerUp.height > player.y &&
             powerUp.y < player.y + player.height &&
-            powerUp.x < player.x + player.width / 2 &&
-            powerUp.x + powerUp.width > player.x - player.width / 2) {
+            powerUp.x + powerUp.width > player.x - player.width / 2 &&
+            powerUp.x < player.x + player.width / 2) {
             if (powerUp.type === 'fuel') {
                 player.fuel = Math.min(player.maxFuel, player.fuel + 30);
             } else if (powerUp.type === 'boost') {
-                // Reduce shoot interval for faster shooting (higher rate)
-                currentShootInterval = Math.max(5, modes[gameMode].shootInterval / 2); // Half the base interval, min 5
+                currentShootInterval = Math.max(5, modes[gameMode].shootInterval / 2);
                 setTimeout(() => {
-                    currentShootInterval = modes[gameMode].shootInterval; // Reset after 5 seconds
+                    currentShootInterval = modes[gameMode].shootInterval;
                 }, 5000);
             }
-            powerUps.splice(index, 1);
+            powerUps.splice(powerUpIndex, 1);
             if (Math.random() < 0.5) {
                 speech.text = "Don't give up Blastar Ship";
                 window.speechSynthesis.speak(speech);
@@ -477,7 +466,7 @@ function resetGame() {
     gameStarted = false;
     frameCount = 0;
     gameMode = null;
-    currentShootInterval = null; // Reset to null, set on mode selection
+    currentShootInterval = null;
 }
 
 // Wait for images to load before starting
