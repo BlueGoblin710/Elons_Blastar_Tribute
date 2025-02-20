@@ -49,6 +49,7 @@ let score = 0;
 let frameCount = 0;
 let gameStarted = false;
 let gameMode = null;
+let boostActive = false; // Track boost state
 
 // Mode settings
 const modes = {
@@ -59,9 +60,9 @@ const modes = {
         enemyShootCooldowns: { fast: 180, tank: 120, basic: 240 },
         powerUpSpeed: 0.3,
         fuelConsumption: 0.001,
-        shootInterval: 30,
-        enemySpawnInterval: 150,
-        powerUpSpawnInterval: 600
+        shootInterval: 15,
+        enemySpawnInterval: 100,
+        powerUpSpawnInterval: 300
     },
     medium: {
         playerSpeed: 2,
@@ -70,9 +71,9 @@ const modes = {
         enemyShootCooldowns: { fast: 120, tank: 90, basic: 150 },
         powerUpSpeed: 0.5,
         fuelConsumption: 0.002,
-        shootInterval: 20,
-        enemySpawnInterval: 100,
-        powerUpSpawnInterval: 400
+        shootInterval: 10,
+        enemySpawnInterval: 75,
+        powerUpSpawnInterval: 200
     },
     hardcore: {
         playerSpeed: 3,
@@ -81,9 +82,9 @@ const modes = {
         enemyShootCooldowns: { fast: 60, tank: 40, basic: 80 },
         powerUpSpeed: 1,
         fuelConsumption: 0.005,
-        shootInterval: 10,
+        shootInterval: 5,
         enemySpawnInterval: 50,
-        powerUpSpawnInterval: 200
+        powerUpSpawnInterval: 150
     }
 };
 
@@ -135,6 +136,10 @@ function keyUpHandler(e) {
 function startGame() {
     gameStarted = true;
     player.speed = modes[gameMode].playerSpeed;
+    enemies = [];
+    powerUps = [];
+    frameCount = 0;
+    boostActive = false; // Reset boost state
     if (!introPlayed) {
         speech.text = "Blastar Ship GO GO Enemies are on the Attack!";
         window.speechSynthesis.speak(speech);
@@ -162,21 +167,27 @@ function drawPlayer() {
 
 // Player Bullet class
 class Bullet {
-    constructor(x, y) {
+    constructor(x, y, width = 4, height = 10, angle = 0) {
         this.x = x;
         this.y = y;
-        this.width = 4;
-        this.height = 10;
+        this.width = width; // Variable size for boost
+        this.height = height;
         this.speed = modes[gameMode].bulletSpeed;
+        this.angle = angle; // For shotgun spread
     }
 
     draw() {
         ctx.fillStyle = '#ff0';
-        ctx.fillRect(this.x, this.y, this.width, this.height);
+        ctx.save();
+        ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+        ctx.rotate(this.angle);
+        ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
+        ctx.restore();
     }
 
     update() {
-        this.y -= this.speed;
+        this.y -= this.speed * Math.cos(this.angle);
+        this.x += this.speed * Math.sin(this.angle); // Spread horizontally
     }
 }
 
@@ -333,10 +344,19 @@ function update() {
     if (upPressed && player.y > 0) player.y -= player.speed;
     if (downPressed && player.y + player.height < canvas.height) player.y += player.speed;
 
-    // Shoot two bullets from left and right sides
+    // Shoot bullets (normal or shotgun spray based on boost)
     if (spacePressed && frameCount % currentShootInterval === 0) {
-        bullets.push(new Bullet(player.x - player.width / 2 + 5, player.y));
-        bullets.push(new Bullet(player.x + player.width / 2 - 5, player.y));
+        if (boostActive) {
+            // Shotgun spray: 5 bigger missiles
+            for (let i = -2; i <= 2; i++) {
+                let angle = i * 0.2; // Spread angle in radians
+                bullets.push(new Bullet(player.x, player.y, 10, 20, angle)); // Bigger bullets
+            }
+        } else {
+            // Normal shots
+            bullets.push(new Bullet(player.x - player.width / 2 + 5, player.y));
+            bullets.push(new Bullet(player.x + player.width / 2 - 5, player.y));
+        }
         playSound(500, 0.1);
     }
 
@@ -349,11 +369,10 @@ function update() {
 
     // Update and draw enemy bullets
     enemyBullets = enemyBullets.filter(b => b.y < canvas.height);
-    enemyBullets.forEach((bullet, bulletIndex) => {
+    enemyBullets.forEach(bullet => {
         bullet.update();
         bullet.draw();
 
-        // Precise collision with player
         if (bullet.y + bullet.height > player.y &&
             bullet.y < player.y + player.height &&
             bullet.x + bullet.width > player.x - player.width / 2 &&
@@ -364,13 +383,21 @@ function update() {
         }
     });
 
+    // Spawn enemies and power-ups
+    frameCount++;
+    if (frameCount % modes[gameMode].enemySpawnInterval === 0) {
+        const type = Math.random() < 0.3 ? 'fast' : Math.random() < 0.6 ? 'tank' : 'basic';
+        enemies.push(new Enemy(type));
+    }
+    if (frameCount % modes[gameMode].powerUpSpawnInterval === 0) {
+        powerUps.push(new PowerUp());
+    }
+
     // Update and draw enemies
-    enemies = enemies.filter(e => e.y < canvas.height);
     enemies.forEach(enemy => {
         enemy.update();
         enemy.draw();
 
-        // Collision with player bullets
         bullets.forEach((bullet, bulletIndex) => {
             if (bullet.x < enemy.x + enemy.width &&
                 bullet.x + bullet.width > enemy.x &&
@@ -380,7 +407,8 @@ function update() {
                 bullets.splice(bulletIndex, 1);
                 if (enemy.health <= 0) {
                     createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
-                    enemies.splice(enemies.indexOf(enemy), 1);
+                    let enemyIndex = enemies.indexOf(enemy);
+                    if (enemyIndex !== -1) enemies.splice(enemyIndex, 1);
                     score += enemy.type === 'tank' ? 20 : 10;
                     if (Math.random() < 0.1) {
                         speech.text = "Don't give up Blastar Ship";
@@ -390,7 +418,6 @@ function update() {
             }
         });
 
-        // Precise collision with player
         if (enemy.y + enemy.height > player.y &&
             enemy.y < player.y + player.height &&
             enemy.x + enemy.width > player.x - player.width / 2 &&
@@ -409,12 +436,10 @@ function update() {
     });
 
     // Update and draw power-ups
-    powerUps = powerUps.filter(p => p.y < canvas.height);
     powerUps.forEach((powerUp, powerUpIndex) => {
         powerUp.update();
         powerUp.draw();
 
-        // Power-up collection with precise check
         if (powerUp.y + powerUp.height > player.y &&
             powerUp.y < player.y + player.height &&
             powerUp.x + powerUp.width > player.x - player.width / 2 &&
@@ -422,10 +447,10 @@ function update() {
             if (powerUp.type === 'fuel') {
                 player.fuel = Math.min(player.maxFuel, player.fuel + 30);
             } else if (powerUp.type === 'boost') {
-                currentShootInterval = Math.max(5, modes[gameMode].shootInterval / 2);
+                boostActive = true;
                 setTimeout(() => {
-                    currentShootInterval = modes[gameMode].shootInterval;
-                }, 5000);
+                    boostActive = false;
+                }, 5000); // Boost lasts 5 seconds
             }
             powerUps.splice(powerUpIndex, 1);
             if (Math.random() < 0.5) {
@@ -466,6 +491,7 @@ function resetGame() {
     gameStarted = false;
     frameCount = 0;
     gameMode = null;
+    boostActive = false;
     currentShootInterval = null;
 }
 
